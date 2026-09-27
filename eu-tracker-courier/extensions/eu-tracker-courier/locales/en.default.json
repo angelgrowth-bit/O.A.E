@@ -1,0 +1,10 @@
+{
+  "eu_tracker": {
+    "heading": "Track your shipment",
+    "description": "Enter the tracking number from your confirmation email.",
+    "placeholder": "EU776017541338896466",
+    "button": "Track shipment",
+    "loading": "Looking up your shipment…",
+    "error": "We could not look up this shipment. Please try again in a few seconds."
+  }
+}

@@ -1,0 +1,274 @@
+{%- comment -%}
+  EU TRACKER COURIER — bloque de seguimiento para el tema.
+
+  Arrástralo a cualquier página desde el editor de temas. El formulario
+  consulta el proxy de la app (/apps/eu-tracker) y muestra el resultado en la
+  misma página. Si el navegador no ejecuta JavaScript, el formulario funciona
+  igualmente enviando a la página de seguimiento.
+{%- endcomment -%}
+
+{%- assign eutc_id = 'eutc-' | append: block.id -%}
+{%- assign eutc_endpoint = '/apps/eu-tracker' -%}
+
+<div
+  id="{{ eutc_id }}"
+  class="eutc-widget"
+  data-endpoint="{{ eutc_endpoint }}"
+  data-loading="{{ 'eu_tracker.loading' | t }}"
+  data-error="{{ 'eu_tracker.error' | t }}"
+  style="
+    --eutc-widget-accent: {{ block.settings.accent_color }};
+    --eutc-widget-radius: {{ block.settings.corner_radius }}px;
+    max-width: {{ block.settings.max_width }}px;
+    margin: 0 auto;
+    padding: {{ block.settings.padding_top }}px 16px {{ block.settings.padding_bottom }}px;
+  "
+>
+  {%- if block.settings.heading != blank -%}
+    <h2 class="eutc-widget__heading">{{ block.settings.heading }}</h2>
+  {%- endif -%}
+
+  {%- if block.settings.description != blank -%}
+    <p class="eutc-widget__description">{{ block.settings.description }}</p>
+  {%- endif -%}
+
+  <form class="eutc-widget__form" method="get" action="{{ eutc_endpoint }}" role="search">
+    <label class="eutc-widget__label" for="{{ eutc_id }}-input">
+      {{ block.settings.field_label }}
+    </label>
+    <div class="eutc-widget__row">
+      <input
+        id="{{ eutc_id }}-input"
+        class="eutc-widget__input"
+        type="text"
+        name="number"
+        placeholder="{{ block.settings.placeholder }}"
+        autocomplete="off"
+        spellcheck="false"
+        required
+      >
+      <button class="eutc-widget__button" type="submit">{{ block.settings.button_label }}</button>
+    </div>
+  </form>
+
+  <div class="eutc-widget__result" aria-live="polite"></div>
+</div>
+
+<style>
+  #{{ eutc_id }} .eutc-widget__heading {
+    margin: 0 0 8px;
+    font-size: 1.6rem;
+    line-height: 1.2;
+  }
+  #{{ eutc_id }} .eutc-widget__description {
+    margin: 0 0 20px;
+    opacity: 0.75;
+  }
+  #{{ eutc_id }} .eutc-widget__label {
+    display: block;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin-bottom: 6px;
+  }
+  #{{ eutc_id }} .eutc-widget__row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  #{{ eutc_id }} .eutc-widget__input {
+    flex: 1 1 250px;
+    min-width: 0;
+    padding: 13px 15px;
+    font-size: 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.04em;
+    border: 1px solid currentColor;
+    border-color: color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: var(--eutc-widget-radius);
+    background: transparent;
+    color: inherit;
+  }
+  #{{ eutc_id }} .eutc-widget__input:focus {
+    outline: 2px solid var(--eutc-widget-accent);
+    outline-offset: 1px;
+  }
+  #{{ eutc_id }} .eutc-widget__button {
+    padding: 13px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    border: 0;
+    cursor: pointer;
+    border-radius: var(--eutc-widget-radius);
+    background: var(--eutc-widget-accent);
+    color: #fff;
+  }
+  #{{ eutc_id }} .eutc-widget__button:hover { filter: brightness(1.08); }
+  #{{ eutc_id }} .eutc-widget__button[disabled] { opacity: 0.6; cursor: progress; }
+  #{{ eutc_id }} .eutc-widget__result { margin-top: 22px; }
+  #{{ eutc_id }} .eutc-widget__result .eutc { --eutc-accent: var(--eutc-widget-accent); }
+  #{{ eutc_id }} .eutc-widget__result .eutc-form { display: none; }
+  #{{ eutc_id }} .eutc-widget__status { margin: 18px 0 0; opacity: 0.75; }
+</style>
+
+<script>
+  (function () {
+    var root = document.getElementById('{{ eutc_id }}');
+    if (!root || root.dataset.ready === '1') return;
+    root.dataset.ready = '1';
+
+    var form = root.querySelector('.eutc-widget__form');
+    var input = root.querySelector('.eutc-widget__input');
+    var button = root.querySelector('.eutc-widget__button');
+    var result = root.querySelector('.eutc-widget__result');
+    var endpoint = root.dataset.endpoint;
+
+    function message(text) {
+      result.innerHTML = '<p class="eutc-widget__status"></p>';
+      result.querySelector('p').textContent = text;
+    }
+
+    function lookup(number) {
+      if (!number) return;
+      button.disabled = true;
+      message(root.dataset.loading);
+
+      fetch(endpoint + '?format=fragment&number=' + encodeURIComponent(number), {
+        headers: { 'X-Requested-With': 'fetch' }
+      })
+        .then(function (response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return response.text();
+        })
+        .then(function (html) {
+          result.innerHTML = html;
+        })
+        .catch(function () {
+          message(root.dataset.error);
+        })
+        .finally(function () {
+          button.disabled = false;
+        });
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var number = (input.value || '').trim().toUpperCase();
+      input.value = number;
+
+      // Deja el número en la URL para que el enlace se pueda compartir.
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.set('number', number);
+        window.history.replaceState({}, '', url.toString());
+      } catch (error) {
+        /* navegadores antiguos: no pasa nada */
+      }
+
+      lookup(number);
+    });
+
+    // Búsqueda automática si se llega con ?number= en la URL.
+    var initial = '';
+    try {
+      initial = (new URL(window.location.href).searchParams.get('number') || '').trim().toUpperCase();
+    } catch (error) {
+      initial = '';
+    }
+    if (initial) {
+      input.value = initial;
+      lookup(initial);
+    }
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Seguimiento de envíos",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Título",
+      "default": "Sigue tu envío"
+    },
+    {
+      "type": "textarea",
+      "id": "description",
+      "label": "Texto de ayuda",
+      "default": "Introduce el número de seguimiento que aparece en tu email de confirmación."
+    },
+    {
+      "type": "text",
+      "id": "field_label",
+      "label": "Etiqueta del campo",
+      "default": "Número de seguimiento"
+    },
+    {
+      "type": "text",
+      "id": "placeholder",
+      "label": "Texto de ejemplo",
+      "default": "EU776017541338896466"
+    },
+    {
+      "type": "text",
+      "id": "button_label",
+      "label": "Texto del botón",
+      "default": "Buscar envío"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Color principal",
+      "default": "#1F6FEB"
+    },
+    {
+      "type": "range",
+      "id": "corner_radius",
+      "label": "Redondeo de esquinas",
+      "min": 0,
+      "max": 30,
+      "step": 2,
+      "unit": "px",
+      "default": 14
+    },
+    {
+      "type": "range",
+      "id": "max_width",
+      "label": "Ancho máximo",
+      "min": 400,
+      "max": 1200,
+      "step": 20,
+      "unit": "px",
+      "default": 760
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Espacio superior",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Espacio inferior",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "default": 40
+    }
+  ],
+  "presets": [
+    {
+      "name": "Seguimiento de envíos"
+    }
+  ]
+}
+{% endschema %}

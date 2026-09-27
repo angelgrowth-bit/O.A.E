@@ -1,0 +1,56 @@
+# EU TRACKER COURIER — configuración de la app de Shopify.
+#
+# `client_id` lo rellena solo el comando `npm run config:link`.
+# `application_url` y `redirect_urls` los actualiza `npm run dev` con la URL
+# del túnel, y los cambiarás a tu dominio definitivo al desplegar.
+
+name = "EU TRACKER COURIER"
+handle = "eu-tracker-courier"
+client_id = ""
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_orders,write_orders,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_third_party_fulfillment_orders,write_third_party_fulfillment_orders,read_locations"
+
+[auth]
+redirect_urls = [
+  "https://example.com/auth/callback",
+  "https://example.com/auth/shopify/callback",
+  "https://example.com/api/auth/callback"
+]
+
+# Página pública de seguimiento servida desde el dominio de la tienda:
+#   https://tu-tienda.com/apps/eu-tracker
+[app_proxy]
+url = "https://example.com/proxy"
+subpath = "eu-tracker"
+prefix = "apps"
+
+[webhooks]
+api_version = "2025-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = ["app/uninstalled"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = ["app/scopes_update"]
+
+  # Alta inmediata de pedidos nuevos (se preparan en la ventana nocturna).
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/create"
+  topics = ["orders/create"]
+
+  # Mantiene el estado en sincronía si preparas un pedido a mano en Shopify.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/cancelled"
+  topics = ["orders/cancelled"]
+
+[pos]
+embedded = false
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true

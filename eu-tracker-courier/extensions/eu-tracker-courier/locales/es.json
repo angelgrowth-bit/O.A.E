@@ -1,0 +1,10 @@
+{
+  "eu_tracker": {
+    "heading": "Sigue tu envío",
+    "description": "Introduce el número de seguimiento que aparece en tu email de confirmación.",
+    "placeholder": "EU776017541338896466",
+    "button": "Buscar envío",
+    "loading": "Buscando tu envío…",
+    "error": "No hemos podido consultar el envío. Inténtalo de nuevo en unos segundos."
+  }
+}

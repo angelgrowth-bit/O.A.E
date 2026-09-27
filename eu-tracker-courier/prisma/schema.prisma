@@ -1,0 +1,198 @@
+// EU TRACKER COURIER — esquema de base de datos
+//
+// Por defecto usa SQLite (cero configuración, ideal para desarrollo).
+// Para producción cambia `provider` a "postgresql" y apunta DATABASE_URL
+// a tu base de datos. Ver README.md → "Pasar a producción".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Sesiones OAuth de Shopify. Una fila por tienda instalada.
+/// Gestionada automáticamente por @shopify/shopify-app-session-storage-prisma.
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+/// Configuración por tienda. Se crea sola la primera vez que se abre la app.
+model ShopSettings {
+  shop String @id
+
+  // ── Automatización ────────────────────────────────────────────────
+  /// Interruptor maestro. Si está en false no se prepara nada de forma automática.
+  automationEnabled Boolean @default(true)
+  /// Hora de inicio de la ventana aleatoria (hora local de la tienda).
+  windowStartHour   Int     @default(2)
+  /// Hora de fin de la ventana aleatoria (exclusiva).
+  windowEndHour     Int     @default(7)
+  /// Zona horaria IANA de la tienda. Se autodetecta desde Shopify al instalar.
+  timezone          String  @default("Europe/Madrid")
+  /// Minutos durante los que se reparten los pedidos dentro de la ejecución,
+  /// para que las marcas de tiempo no sean todas idénticas.
+  spreadMinutes     Int     @default(45)
+
+  // ── Formato del número de seguimiento ─────────────────────────────
+  /// Prefijo de letras. Referencia: EU776017541338896466 → "EU".
+  prefix  String @default("EU")
+  /// Código de centro emisor (6 dígitos). Referencia → "776017".
+  hubCode String @default("776017")
+
+  // ── Transportista ─────────────────────────────────────────────────
+  carrierName         String @default("EU Tracker Courier")
+  /// Plantilla de URL pública. {{number}} se sustituye por el número.
+  /// Vacío = usa la URL de la propia app.
+  trackingUrlTemplate String @default("")
+  /// Si está activo, la URL de seguimiento apunta al proxy de la tienda
+  /// (https://tu-tienda.com/apps/eu-tracker) en lugar del dominio de la app.
+  useStorefrontProxy  Boolean @default(true)
+
+  // ── Comportamiento al preparar ────────────────────────────────────
+  /// Enviar el email de confirmación de envío de Shopify al cliente.
+  notifyCustomer    Boolean @default(true)
+  /// Modo simulación: calcula y registra todo, pero NO toca Shopify.
+  dryRun            Boolean @default(false)
+  /// Procesar también los pedidos antiguos que ya estaban sin preparar.
+  backfillEnabled   Boolean @default(true)
+  /// Tope de pedidos por ejecución (protege contra sustos en tiendas grandes).
+  maxOrdersPerRun   Int     @default(250)
+  /// No tocar pedidos con menos de X minutos de antigüedad.
+  minOrderAgeMinutes Int    @default(0)
+  /// Etiquetas separadas por comas: si el pedido tiene alguna, se salta.
+  skipTags          String  @default("")
+  /// Etiquetas separadas por comas: si no está vacío, solo se procesan pedidos con alguna.
+  onlyTags          String  @default("")
+  /// Saltar pedidos sin pagar.
+  requirePaid       Boolean @default(false)
+
+  // ── Simulación de tránsito ────────────────────────────────────────
+  transitDaysMin Int     @default(2)
+  transitDaysMax Int     @default(5)
+  /// No contar sábados ni domingos como días de tránsito.
+  skipWeekends   Boolean @default(true)
+  originCity     String  @default("Madrid, ES")
+
+  // ── Estado de planificación ───────────────────────────────────────
+  nextRunAt   DateTime?
+  lastRunAt   DateTime?
+  installedAt DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([automationEnabled, nextRunAt])
+}
+
+/// Un envío = un pedido preparado con su número de seguimiento.
+model Shipment {
+  id   String @id @default(cuid())
+  shop String
+
+  /// GID del pedido en Shopify (gid://shopify/Order/123).
+  orderId     String
+  orderName   String
+  orderNumber Int?
+
+  trackingNumber String @unique
+  trackingUrl    String
+  carrierName    String
+
+  /// pending | in_transit | out_for_delivery | delivered | exception
+  status String @default("pending")
+
+  customerName       String?
+  customerEmail      String?
+  destinationCity    String?
+  destinationZip     String?
+  destinationCountry String?
+  originCity         String?
+
+  itemCount  Int     @default(0)
+  totalPrice String?
+  currency   String?
+
+  /// GIDs de los fulfillments creados, separados por comas.
+  fulfillmentIds String @default("")
+  /// True si se creó en modo simulación (no existe en Shopify).
+  dryRun         Boolean @default(false)
+
+  fulfilledAt         DateTime  @default(now())
+  estimatedDeliveryAt DateTime?
+  deliveredAt         DateTime?
+  /// Última vez que se materializaron los checkpoints de tránsito.
+  lastAdvancedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events TrackingEvent[]
+
+  @@unique([shop, orderId])
+  @@index([shop, fulfilledAt])
+  @@index([shop, status])
+  @@index([trackingNumber])
+}
+
+/// Checkpoint del recorrido de un envío.
+model TrackingEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  /// registered | picked_up | in_transit | arrived | customs | out_for_delivery | delivered
+  code     String
+  title    String
+  detail   String?
+  location String?
+
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([shipmentId, code])
+  @@index([shipmentId, occurredAt])
+}
+
+/// Registro de cada ejecución del motor, para auditoría y diagnóstico.
+model RunLog {
+  id   String @id @default(cuid())
+  shop String
+
+  /// scheduled | manual | cron | webhook | backfill
+  trigger String
+  /// running | success | partial | error | skipped
+  status  String
+
+  ordersFound     Int @default(0)
+  ordersFulfilled Int @default(0)
+  ordersFailed    Int @default(0)
+  ordersSkipped   Int @default(0)
+
+  message String?
+  /// JSON con el detalle por pedido.
+  details String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+
+  @@index([shop, startedAt])
+}

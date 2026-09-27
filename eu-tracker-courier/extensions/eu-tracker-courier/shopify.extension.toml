@@ -1,0 +1,6 @@
+api_version = "2025-10"
+
+[[extensions]]
+type = "theme"
+name = "EU Tracker Courier"
+handle = "eu-tracker-courier"
